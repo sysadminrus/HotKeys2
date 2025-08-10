@@ -28,6 +28,7 @@ class MainWindow(QMainWindow):
         self.central_layout.addWidget(self.ticketNumber)
         self.buttonOk = QPushButton('Ok')
         self.buttonOk.setAutoDefault(True)
+        self.buttonOk.clicked.connect(self.buttonOk_pressed)
         self.central_layout.addWidget(self.buttonOk)
         self.widget = QWidget()
         self.widget.setLayout(self.central_layout)
