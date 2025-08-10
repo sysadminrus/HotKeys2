@@ -1,4 +1,5 @@
 from datetime import date
+import shutil
 import threading
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QWidget, QMainWindow, QLineEdit, QPushButton, QHBoxLayout, QSystemTrayIcon, QMenu
@@ -6,11 +7,12 @@ from PyQt6.QtGui import QIcon, QAction
 import keyboard
 import os
 import subprocess
+import zipfile
 
 TICKET_NUM_FILE = 'tnum.txt'
 GIT_PATH = "C:/Git/"
-"""Предполагается 7Zip"""
-ZIP_EXE_PATH = "C:/Program Files/7-Zip/7z.exe"
+# """Предполагается 7Zip"""
+# ZIP_EXE_PATH = "C:/Program Files/7-Zip/7z.exe"
 
 
 class MainWindow(QMainWindow):
@@ -77,13 +79,11 @@ class MainWindow(QMainWindow):
         )
 
     def enterClick(self):
-        text_of_line = self.ticketNumber.text()
-        save_last_num(text_of_line)
+        save_last_num(self.ticketNumber.text())
         self.hide()
 
     def buttonOk_pressed(self):
-        text_of_line = self.ticketNumber.text()
-        save_last_num(text_of_line)
+        save_last_num(self.ticketNumber.text())
         self.hide()
 
 def comment_hotkey_pressed(window: MainWindow):
@@ -96,11 +96,14 @@ def open_notepad():
             print(sErrCode)
     
 def update_git():
-    #TODO Продумать далее
     """Распаковать ConfigFiles.zip в ConfFiles
     Перед этим удаляется старый ConfFiles
     """
-    pass
+    if os.path.exists(GIT_PATH):
+        if os.path.exists(f'{GIT_PATH} + "/ConfFiles"'):
+            shutil.rmtree(f'{GIT_PATH} + "/ConfFiles"')
+        with zipfile.ZipFile(f'{GIT_PATH} + "/ConfigFiles.zip"', 'r') as zip_ref:
+            zip_ref.extractall(f'{GIT_PATH} + "/ConfFiles/"')
 
 def run_config():
     #TODO А может и не так, а включать ТЖ И ловить по нему ошибку?
@@ -108,11 +111,17 @@ def run_config():
         try:
             subprocess.Popen(args=['C:/Program Files/1cv8/common/1cestart.exe', 'DESIGNER', '/IBName' 'Библиотека стандартных подсистем (демо)', '/NАдминистратор', 
                     '/LoadConfigFromFiles' 'C:/Git/ConfigFiles/', '-Extension' 'УниверсальныеИнструменты', 
-                    '-updateConfigDumpInfo', '/Out 1.txt']).communicate(timeout=120)
+                    '-updateConfigDumpInfo', '/Out 1cLog.txt']).communicate(timeout=120)
         except subprocess.TimeoutExpired:
-            print(f'Закончилось время')
-        except:
-            print('Другая ошибка запуска')
+            print('Закончилось время')
+        except subprocess.OSError:
+            print('Ошибка ОС при запуске')
+        except subprocess.CalledProcessError:
+            print('Ошибка вызываемой программы')
+        except subprocess.ValueError:
+            print('Ошибка значения аргументов при вызове Popen')
+        # except:
+        #     print('Другая ошибка запуска')
         #sErrCode = subprocess.Popen('C:/Program Files/1cv8/common/1cestart.exe DESIGNER /IBName \"Библиотека стандартных подсистем (демо)\" /NАдминистратор /LoadConfigFromFiles C:\Git\ConfigFiles\ -Extension \"УниверсальныеИнструменты\" -updateConfigDumpInfo -SessionTerminate force -v2')
         
         
@@ -129,7 +138,7 @@ def load_last_num():
         with open(TICKET_NUM_FILE, "r") as f:
             return f.readline().replace('\r\n', '').strip()
     except:
-        return ''
+        return 'Ошибка чтения файла тикета'
     
 def save_last_num(ticketNumber):
         with open(TICKET_NUM_FILE, "w+") as f:
@@ -141,5 +150,4 @@ if __name__ == "__main__":
     window = MainWindow()
     threading.Thread(target=wait_keys, args=(window,)).start()
     app.exec()
-
-
+    
