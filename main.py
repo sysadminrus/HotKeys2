@@ -2,7 +2,7 @@ from datetime import date
 import shutil
 import threading
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QApplication, QWidget, QMainWindow, QLineEdit, QPushButton, QHBoxLayout, QSystemTrayIcon, QMenu
+from PyQt6.QtWidgets import QApplication, QWidget, QMainWindow, QLineEdit, QPushButton, QSystemTrayIcon, QMenu, QCheckBox, QVBoxLayout
 from PyQt6.QtGui import QIcon, QAction
 import keyboard
 import os
@@ -11,6 +11,8 @@ import zipfile
 
 TICKET_NUM_FILE = 'tnum.txt'
 GIT_PATH = "C:/Git/"
+WORK_DIR = "C:/Work/Tasks/InWork"
+WORK_DONE_DIR = "C:/Work/Tasks/Done"
 # """Предполагается 7Zip"""
 # ZIP_EXE_PATH = "C:/Program Files/7-Zip/7z.exe"
 
@@ -20,7 +22,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle('Номер заявки')
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-        self.central_layout = QHBoxLayout()
+        self.central_layout = QVBoxLayout()
         self.ticketNumber = QLineEdit()
         last_ticket_number = load_last_num()
         self.ticketNumber.setText(last_ticket_number)
@@ -28,7 +30,15 @@ class MainWindow(QMainWindow):
         self.central_layout.addWidget(self.ticketNumber)
         self.buttonOk = QPushButton('Ok')
         self.buttonOk.setAutoDefault(True)
-        self.buttonOk.clicked.connect(self.buttonOk_pressed)
+        self.buttonOk.clicked.connect(self.enterClick)
+        '''Создать при нажатии на OK рабочую директорию для задачи'''
+        self.checkCreateInWork = QCheckBox('Создать в работе')
+        self.checkCreateInWork.stateChanged.connect(self.checkbox_state_changed)
+        self.central_layout.addWidget(self.checkCreateInWork)
+        '''Переместить файлы по задаче в выполненные'''
+        self.checkCopyInDone = QCheckBox('Переместить в выполненные')
+        self.checkCopyInDone.stateChanged.connect(self.checkbox_state_changed)
+        self.central_layout.addWidget(self.checkCopyInDone)        
         self.central_layout.addWidget(self.buttonOk)
         self.widget = QWidget()
         self.widget.setLayout(self.central_layout)
@@ -46,6 +56,16 @@ class MainWindow(QMainWindow):
         self.tray_icon.activated.connect(self.tray_icon_clicked)
         self.tray_icon.show()
         self.hide()
+    
+    def checkbox_state_changed(self):
+        if self.checkCreateInWork.isChecked():
+            self.checkCopyInDone.setEnabled(False)
+        else:
+            self.checkCopyInDone.setEnabled(True)
+        if self.checkCopyInDone.isChecked():
+            self.checkCreateInWork.setEnabled(False)
+        else:
+            self.checkCreateInWork.setEnabled(True)
         
     def show_window(self):
         """Развернуть окно приложения"""
@@ -81,10 +101,17 @@ class MainWindow(QMainWindow):
 
     def enterClick(self):
         save_last_num(self.ticketNumber.text())
-        self.hide()
-
-    def buttonOk_pressed(self):
-        save_last_num(self.ticketNumber.text())
+        if self.checkCreateInWork.isChecked():
+            if not os.path.exists(WORK_DIR):
+                os.makedirs(WORK_DIR)
+            if not os.path.exists(f'{WORK_DIR}/{self.ticketNumber.text()}'):
+                os.makedirs(f'{WORK_DIR}/{self.ticketNumber.text()}')
+            else:
+                print('Директория уже существует')
+        if self.checkCopyInDone.isChecked() and os.path.exists(f'{WORK_DIR}/{self.ticketNumber.text()}'):
+            if not os.path.exists(WORK_DONE_DIR):
+                os.makedirs(WORK_DONE_DIR)    
+            shutil.move(f'{WORK_DIR}/{self.ticketNumber.text()}', WORK_DONE_DIR)
         self.hide()
 
 def comment_hotkey_pressed(window: MainWindow):
@@ -138,7 +165,7 @@ def load_last_num():
     try:
         with open(TICKET_NUM_FILE, "r") as f:
             return f.readline().replace('\r\n', '').strip()
-    except:
+    except OSError:
         return 'Ошибка чтения файла тикета'
     
 def save_last_num(ticketNumber):
