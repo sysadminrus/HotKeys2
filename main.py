@@ -1,8 +1,8 @@
 from datetime import date
 import shutil
 import threading
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QApplication, QWidget, QMainWindow, QLineEdit, QPushButton, QSystemTrayIcon, QMenu, QCheckBox, QVBoxLayout
+from PyQt6.QtCore import Qt, QTimer, QTime, QDateTime
+from PyQt6.QtWidgets import QApplication, QWidget, QMainWindow, QLineEdit, QPushButton, QSystemTrayIcon, QMenu, QCheckBox, QVBoxLayout, QLabel
 from PyQt6.QtGui import QIcon, QAction
 import keyboard
 import os
@@ -13,9 +13,9 @@ TICKET_NUM_FILE = 'tnum.txt'
 GIT_PATH = "C:/Git/"
 WORK_DIR = "C:/Work/Tasks/InWork"
 WORK_DONE_DIR = "C:/Work/Tasks/Done"
+TARGET_TIME = QTime(17, 50)
 # """Предполагается 7Zip"""
 # ZIP_EXE_PATH = "C:/Program Files/7-Zip/7z.exe"
-
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -171,7 +171,7 @@ def load_last_num():
 def save_last_num(ticketNumber):
         with open(TICKET_NUM_FILE, "w+") as f:
             f.write(ticketNumber + '\r\n')
-    
+
 if __name__ == "__main__":
     app = QApplication([])
     app.setWindowIcon(QIcon("Bull.png"))
