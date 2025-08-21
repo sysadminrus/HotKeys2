@@ -115,7 +115,7 @@ class MainWindow(QMainWindow):
         self.hide()
 
 def comment_hotkey_pressed(window: MainWindow):
-    keyboard.write(f'//++GIV {str(date.today())} ({load_last_num()})\n\n//--GIV {str(date.today())} ({load_last_num()})')
+    keyboard.write(f'//++GIV {str(date.today())} ({load_last_num()})\r\n//--GIV {str(date.today())} ({load_last_num()})')
 
 def open_notepad():
     if os.path.exists("C:/Program Files/Notepad++/notepad++.exe"):
