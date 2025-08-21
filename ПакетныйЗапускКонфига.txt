@@ -1,1 +1,0 @@
-"C:\Program Files\1cv8\common\1cestart.exe" DESIGNER /IBName "Библиотека стандартных подсистем (демо)" /NАдминистратор /LoadConfigFromFiles C:\Git\ConfigFiles\ -Extension "УниверсальныеИнструменты" -updateConfigDumpInfo -SessionTerminate force -v2
