@@ -1,15 +1,11 @@
-import keyboard
-import os
-import subprocess
-import zipfile
-import shutil
-import threading
-from datetime import date
+import keyboard, os, subprocess, zipfile, shutil, threading, time, sched
+from onec import One1C
+from datetime import date, datetime
 from global_hotkeys import *
-from time import sleep
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QWidget, QMainWindow, QLineEdit, QPushButton, QSystemTrayIcon, QMenu, QCheckBox, QVBoxLayout
 from PyQt6.QtGui import QIcon, QAction
+
 
 
 TICKET_NUM_FILE = 'tnum.txt'
@@ -165,7 +161,7 @@ def run_global_hotkeys():
     register_hotkeys(bindings)
     start_checking_hotkeys()
     while is_alive:
-        sleep(0.1)
+        time.sleep(0.1)
 
 def load_last_num():
     try:
@@ -177,6 +173,13 @@ def load_last_num():
 def save_last_num(ticketNumber):
         with open(TICKET_NUM_FILE, "w+") as f:
             f.write(ticketNumber + '\r\n')
+
+def scheduled_config_update():
+    scheduler = sched.scheduler()
+    #Вызовем метод экземпляра класса
+    TMS = One1C(server='192.168.1.100', port=1540, login='', password='', save_cf_path={}, load_xml_path={},database='DEV TMS')
+    scheduler.enterabs(datetime.datetime(2025,8,14,18,00), 5, TMS.save_to_cf, argument=('C:/Git/ConfigFiles/', ))
+    scheduler.run()
 
 if __name__ == "__main__":
     app = QApplication([])

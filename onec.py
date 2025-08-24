@@ -19,14 +19,14 @@ class One1C():
         return (f'Экземпляр класса 1C База {self.database}, сервер {self.server}')
         
     def save_to_cf(self, path_to_save: str) -> None:
-        process = subprocess.run([ONE_C_EXE_PATH, 'DESIGNER', f'/IBName {self.database}', f'/N {self.username}', f'/P {self.password}', f'/DumpCfg {path_to_save}'], capture_output=True)
+        process = subprocess.run([ONE_C_EXE_PATH, 'DESIGNER', f'/IBName {self.database}', f'/N {self.username}', f'/P {self.password}', f'/DumpCfg {path_to_save}'], f'-Extension {EXTENSION_NAME}', capture_output=True)
         if process.returncode != 0:
             self.log_process_error(process, "Ошибка при сохранении конфигурации")
     
     
     def load_from_xml(self, path_to_load: str):
         process = subprocess.run([ONE_C_EXE_PATH, 'DESIGNER', f'/IBName {self.database}', f'/N {self.username}', f'/P {self.password}', f'/LoadConfigFromFiles {path_to_load}', f'-Extension {EXTENSION_NAME}',
-                                  'updateConfigDumpInfo', 'SessionTerminate force', '-v2'], capture_output=True)
+                                'updateConfigDumpInfo', 'SessionTerminate force', '-v2'], capture_output=True)
         #/LoadConfigFromFiles C:\Git\ConfigFiles\ -Extension "УниверсальныеИнструменты" -updateConfigDumpInfo -SessionTerminate force -v2
         if process.returncode != 0:
             self.log_process_error(process, "Ошибка при загрузке конфигурации из XML")
