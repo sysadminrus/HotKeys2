@@ -1,19 +1,22 @@
-from datetime import date
-import shutil
-import threading
-from PyQt6.QtCore import Qt, QTimer, QTime, QDateTime
-from PyQt6.QtWidgets import QApplication, QWidget, QMainWindow, QLineEdit, QPushButton, QSystemTrayIcon, QMenu, QCheckBox, QVBoxLayout, QLabel
-from PyQt6.QtGui import QIcon, QAction
 import keyboard
 import os
 import subprocess
 import zipfile
+import shutil
+import threading
+from datetime import date
+from global_hotkeys import *
+from time import sleep
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QApplication, QWidget, QMainWindow, QLineEdit, QPushButton, QSystemTrayIcon, QMenu, QCheckBox, QVBoxLayout
+from PyQt6.QtGui import QIcon, QAction
+
 
 TICKET_NUM_FILE = 'tnum.txt'
 GIT_PATH = "C:/Git/"
 WORK_DIR = "C:/Work/Tasks/InWork"
 WORK_DONE_DIR = "C:/Work/Tasks/Done"
-TARGET_TIME = QTime(17, 50)
+is_alive = True
 # """Предполагается 7Zip"""
 # ZIP_EXE_PATH = "C:/Program Files/7-Zip/7z.exe"
 
@@ -114,10 +117,10 @@ class MainWindow(QMainWindow):
             shutil.move(f'{WORK_DIR}/{self.ticketNumber.text()}', WORK_DONE_DIR)
         self.hide()
 
-def comment_hotkey_pressed(window: MainWindow):
-    keyboard.write(f'//++GIV {str(date.today())} ({load_last_num()})\r\n//--GIV {str(date.today())} ({load_last_num()})')
+def comment_hotkey_pressed() -> None:
+    keyboard.write(f'//++GIV {str(date.today())} ({load_last_num()}) \r\n//--GIV {str(date.today())} ({load_last_num()})')
 
-def open_notepad():
+def open_notepad() -> None:
     if os.path.exists("C:/Program Files/Notepad++/notepad++.exe"):
         sErrCode = subprocess.run('C:/Program Files/Notepad++/notepad++.exe')
         if sErrCode.returncode != 0:
@@ -152,14 +155,17 @@ def run_config():
         #     print('Другая ошибка запуска')
         #sErrCode = subprocess.Popen('C:/Program Files/1cv8/common/1cestart.exe DESIGNER /IBName \"Библиотека стандартных подсистем (демо)\" /NАдминистратор /LoadConfigFromFiles C:\Git\ConfigFiles\ -Extension \"УниверсальныеИнструменты\" -updateConfigDumpInfo -SessionTerminate force -v2')
         
-        
-
-def wait_keys(window: MainWindow):
-    keyboard.add_hotkey('ctrl+alt+k', comment_hotkey_pressed,args=(window, ))
-    keyboard.add_hotkey('ctrl+alt+o', open_notepad)
-    keyboard.add_hotkey('ctrl+alt+g', update_git)
-    keyboard.add_hotkey('ctrl+alt+c', run_config)
-    keyboard.wait()
+def run_global_hotkeys():
+    bindings = [
+        ["control + alt + k", None, comment_hotkey_pressed, True],
+        ["control + alt + o", None, open_notepad, True],
+        ["control + alt + g", None, update_git, True],
+        ["control + alt + c", None, run_config, True],
+    ]
+    register_hotkeys(bindings)
+    start_checking_hotkeys()
+    while is_alive:
+        sleep(0.1)
 
 def load_last_num():
     try:
@@ -176,6 +182,6 @@ if __name__ == "__main__":
     app = QApplication([])
     app.setWindowIcon(QIcon("Bull.png"))
     window = MainWindow()
-    threading.Thread(target=wait_keys, args=(window,)).start()
+    threading.Thread(target=run_global_hotkeys).start()
     app.exec()
     
