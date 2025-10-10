@@ -1,20 +1,27 @@
-import keyboard, os, subprocess, zipfile, shutil, threading, time, sched
+import keyboard, os, subprocess, zipfile, shutil, threading, time, sched, pyperclip
 from onec import One1C
 from datetime import date, datetime
 from global_hotkeys import *
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QApplication, QWidget, QMainWindow, QLineEdit, QPushButton, QSystemTrayIcon, QMenu, QCheckBox, QVBoxLayout
+from PyQt6.QtWidgets import QApplication, QWidget, QMainWindow, QLineEdit, QPushButton, QSystemTrayIcon, QMenu, QCheckBox, QVBoxLayout, QTextEdit
 from PyQt6.QtGui import QIcon, QAction
-
-
 
 TICKET_NUM_FILE = 'tnum.txt'
 GIT_PATH = "C:/Git/"
-WORK_DIR = "C:/Work/Tasks/InWork"
-WORK_DONE_DIR = "C:/Work/Tasks/Done"
+WORK_DIR = "Z:/УК/ИТ/КИС/Гладких/Tasks"
+WORK_DONE_DIR = "Z:/УК/ИТ/КИС/Гладких/DoneTasks"
+ADDED_COMPONENTS_FILE = 'components.txt'
 is_alive = True
 # """Предполагается 7Zip"""
 # ZIP_EXE_PATH = "C:/Program Files/7-Zip/7z.exe"
+
+class AddedComponents(QTextEdit):
+    def __init_subclass__(cls):
+        return super().__init_subclass__()
+    
+    def focusOutEvent(self, e):
+        with open(ADDED_COMPONENTS_FILE, "w+") as f:
+            f.write(self.toPlainText() + '\r\n')
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -24,9 +31,15 @@ class MainWindow(QMainWindow):
         self.central_layout = QVBoxLayout()
         self.ticketNumber = QLineEdit()
         last_ticket_number = load_last_num()
+        '''Текст для заметки с новыми компонентами'''
+        self.added_components = AddedComponents()
+        self.added_components.setText(load_added_components())
+        self.central_layout.addWidget(self.added_components)
+        '''Номер тикета'''
         self.ticketNumber.setText(last_ticket_number)
         self.ticketNumber.returnPressed.connect(self.enterClick)
         self.central_layout.addWidget(self.ticketNumber)
+        '''Кнопка Ок'''
         self.buttonOk = QPushButton('Ok')
         self.buttonOk.setAutoDefault(True)
         self.buttonOk.clicked.connect(self.enterClick)
@@ -114,7 +127,7 @@ class MainWindow(QMainWindow):
         self.hide()
 
 def comment_hotkey_pressed() -> None:
-    keyboard.write(f'//++GIV {str(date.today())} ({load_last_num()}) \r\n//--GIV {str(date.today())} ({load_last_num()})')
+    keyboard.write(f'//++GIV {str(date.today().strftime("%d%m%Y"))} ({load_last_num()})\r\n//--GIV {str(date.today().strftime("%d%m%Y"))} ({load_last_num()})')
 
 def open_notepad() -> None:
     if os.path.exists("C:/Program Files/Notepad++/notepad++.exe"):
@@ -122,6 +135,9 @@ def open_notepad() -> None:
         if sErrCode.returncode != 0:
             print(sErrCode)
     
+def open_window() -> None:
+    window.tray_icon_clicked(QSystemTrayIcon.ActivationReason.Trigger)
+
 def update_git():
     """Распаковать ConfigFiles.zip в ConfFiles
     Перед этим удаляется старый ConfFiles
@@ -154,8 +170,9 @@ def run_config():
 def run_global_hotkeys():
     bindings = [
         ["control + alt + k", None, comment_hotkey_pressed, True],
-        ["control + alt + o", None, open_notepad, True],
+        ["control + alt + o", None, open_window, True],
         ["control + alt + g", None, update_git, True],
+        ["control + alt + t", None, paste_path_to_task, True],
         ["control + alt + c", None, run_config, True],
     ]
     register_hotkeys(bindings)
@@ -174,6 +191,11 @@ def save_last_num(ticketNumber):
         with open(TICKET_NUM_FILE, "w+") as f:
             f.write(ticketNumber + '\r\n')
 
+def paste_path_to_task():
+    text_to_clip = f'{WORK_DIR}/{load_last_num()}'
+    pyperclip.copy(text=text_to_clip)
+    pyperclip.paste()
+
 def scheduled_config_update():
     scheduler = sched.scheduler()
     #Вызовем метод экземпляра класса
@@ -181,10 +203,21 @@ def scheduled_config_update():
     scheduler.enterabs(datetime.datetime(2025,8,14,18,00), 5, TMS.save_to_cf, argument=('C:/Git/ConfigFiles/', ))
     scheduler.run()
 
+def load_added_components():
+    try:
+        with open(ADDED_COMPONENTS_FILE, "r") as f:
+            return "".join(f.readlines())
+    except OSError:
+        return 'Ошибка чтения файла тикета'
+
+app = QApplication([])
+app.setWindowIcon(QIcon("Bull.png"))
+window = MainWindow()
+
 if __name__ == "__main__":
-    app = QApplication([])
-    app.setWindowIcon(QIcon("Bull.png"))
-    window = MainWindow()
+    #app = QApplication([])
+    #app.setWindowIcon(QIcon("Bull.png"))
+    #window = MainWindow()
     threading.Thread(target=run_global_hotkeys).start()
     app.exec()
     
