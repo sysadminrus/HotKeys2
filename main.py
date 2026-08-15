@@ -1,45 +1,120 @@
+import keyboard, os, subprocess, shutil, threading, time
 from datetime import date
-import shutil
-import threading
-from PyQt6.QtCore import Qt, QTimer, QTime, QDateTime
-from PyQt6.QtWidgets import QApplication, QWidget, QMainWindow, QLineEdit, QPushButton, QSystemTrayIcon, QMenu, QCheckBox, QVBoxLayout, QLabel
+from global_hotkeys import *
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QApplication, QWidget, QMainWindow, QLineEdit, QPushButton, QSystemTrayIcon, QMenu, QCheckBox, QGridLayout, QTextEdit, QComboBox, QTreeView, QTreeWidgetItem, QAbstractItemView
 from PyQt6.QtGui import QIcon, QAction
-import keyboard
-import os
-import subprocess
-import zipfile
+from oneCtreeparse import DirectoryTreeAdapter
 
+#TODO в файл настроек
 TICKET_NUM_FILE = 'tnum.txt'
 GIT_PATH = "C:/Git/"
-WORK_DIR = "C:/Work/Tasks/InWork"
-WORK_DONE_DIR = "C:/Work/Tasks/Done"
-TARGET_TIME = QTime(17, 50)
+WORK_DIR = "Z:/УК/ИТ/КИС/Гладких/Tasks"
+WORK_DONE_DIR = "Z:/УК/ИТ/КИС/Гладких/DoneTasks"
+ADDED_COMPONENTS_FILE = "components.txt"
+OBSIDIAN_PATH = "C:/Users/user/Documents/Obsidian Vault/УВМ-Сталь/УВМ-Сталь/УВМ-Сталь/АрхивныеЗадачи"
+is_alive = True
 # """Предполагается 7Zip"""
 # ZIP_EXE_PATH = "C:/Program Files/7-Zip/7z.exe"
 
+class AddedComponents(QTextEdit):
+    def __init_subclass__(cls):
+        return super().__init_subclass__()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, e):
+        if e.mimeData().hasText():
+            e.acceptProposedAction()
+        else:
+            e.ignore()
+
+    def dragMoveEvent(self, e):
+        if e.mimeData().hasText():
+            e.acceptProposedAction()
+        else:
+            e.ignore()
+
+    def dropEvent(self, e):
+        if e.mimeData().hasText():
+            if not self._insert_at_drop_pos(e):
+                self._append_to_changed_metadata(e.mimeData().text())
+            e.acceptProposedAction()
+        else:
+            e.ignore()
+
+    def _insert_at_drop_pos(self, e) -> bool:
+        pos = e.position().toPoint()
+        if not self.viewport().rect().contains(pos):
+            return False
+        cursor = self.cursorForPosition(pos)
+        line = cursor.blockNumber()
+        lines = self.toPlainText().split('\n')
+        if not (0 <= line < len(lines)):
+            return False
+        path = '#' + e.mimeData().text().lstrip()
+        lines.insert(line + 1, path)
+        self.setText('\n'.join(lines))
+        return True
+
+    def _append_to_changed_metadata(self, path: str):
+        #GIV немного маркдауна чтобы потом искать по метаданным
+        path = "#" + path.lstrip()
+        text = self.toPlainText().rstrip()
+        text = (text + '\n') if text else text
+        self.setText(text + path)
+
+    def focusOutEvent(self, e):
+        with open(ADDED_COMPONENTS_FILE, "w+") as f:
+            f.write(self.toPlainText() + '\r\n')
+
 class MainWindow(QMainWindow):
     def __init__(self):
-        super().__init__()
+        super().__init__()        
         self.setWindowTitle('Номер заявки')
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-        self.central_layout = QVBoxLayout()
+        self.central_layout = QGridLayout()
         self.ticketNumber = QLineEdit()
         last_ticket_number = load_last_num()
+        '''Дерево конфигурации'''
+        self.configTree = QTreeView()
+        self.configTree.setDragEnabled(True)
+        self.configTree.setDragDropMode(QAbstractItemView.DragDropMode.DragOnly)
+        self.configTree.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.configTree.setExpandsOnDoubleClick(True)
+        self.central_layout.addWidget(self.configTree,2,1)
+        '''Текст для заметки с новыми компонентами'''
+        self.added_components = AddedComponents()
+        self.added_components.setText(load_added_components())
+        self.central_layout.addWidget(self.added_components,2,0)
+        '''Номер тикета'''
         self.ticketNumber.setText(last_ticket_number)
+        self.current_ticket_number = last_ticket_number
         self.ticketNumber.returnPressed.connect(self.enterClick)
-        self.central_layout.addWidget(self.ticketNumber)
+        self.ticketNumber.editingFinished.connect(self.on_ticket_number_edited)
+        self.central_layout.addWidget(self.ticketNumber,3,0)
+        '''Список выбора конфигураций'''
+        self.listOfConfigs = QComboBox()
+        self.listOfConfigs.addItem("TMS")
+        self.listOfConfigs.addItem("ERP")
+        self.listOfConfigs.currentIndexChanged.connect(self.configChanged)
+        self.central_layout.addWidget(self.listOfConfigs,3,1)
+
+        '''Кнопка Ок'''
         self.buttonOk = QPushButton('Ok')
         self.buttonOk.setAutoDefault(True)
         self.buttonOk.clicked.connect(self.enterClick)
         '''Создать при нажатии на OK рабочую директорию для задачи'''
         self.checkCreateInWork = QCheckBox('Создать в работе')
         self.checkCreateInWork.stateChanged.connect(self.checkbox_state_changed)
-        self.central_layout.addWidget(self.checkCreateInWork)
+        self.central_layout.addWidget(self.checkCreateInWork,4,0)
         '''Переместить файлы по задаче в выполненные'''
         self.checkCopyInDone = QCheckBox('Переместить в выполненные')
         self.checkCopyInDone.stateChanged.connect(self.checkbox_state_changed)
-        self.central_layout.addWidget(self.checkCopyInDone)        
-        self.central_layout.addWidget(self.buttonOk)
+        self.central_layout.addWidget(self.checkCopyInDone,5,0)        
+        self.central_layout.addWidget(self.buttonOk,6,0)
         self.widget = QWidget()
         self.widget.setLayout(self.central_layout)
         self.tray_icon = QSystemTrayIcon(self)
@@ -55,8 +130,11 @@ class MainWindow(QMainWindow):
         self.tray_icon.setContextMenu(tray_menu)
         self.tray_icon.activated.connect(self.tray_icon_clicked)
         self.tray_icon.show()
-        self.hide()
-    
+        #self.hide() 
+        # Не понятное поведение, но если не показывать при старте, то не вызывается хоткеями.
+        self.show()
+        self.configChanged()
+
     def checkbox_state_changed(self):
         if self.checkCreateInWork.isChecked():
             self.checkCopyInDone.setEnabled(False)
@@ -76,6 +154,7 @@ class MainWindow(QMainWindow):
     def close_app(self):
         """Закрыть приложение"""
         self.tray_icon.hide()
+        stop_global_hotkeys()
         QApplication.quit()
         
     def tray_icon_clicked(self, reason):
@@ -102,64 +181,78 @@ class MainWindow(QMainWindow):
     def enterClick(self):
         save_last_num(self.ticketNumber.text())
         if self.checkCreateInWork.isChecked():
-            if not os.path.exists(WORK_DIR):
-                os.makedirs(WORK_DIR)
-            if not os.path.exists(f'{WORK_DIR}/{self.ticketNumber.text()}'):
-                os.makedirs(f'{WORK_DIR}/{self.ticketNumber.text()}')
-            else:
-                print('Директория уже существует')
+            try:
+                if not os.path.exists(WORK_DIR):
+                    os.makedirs(WORK_DIR)
+                if not os.path.exists(f'{WORK_DIR}/{self.ticketNumber.text()}'):
+                    os.makedirs(f'{WORK_DIR}/{self.ticketNumber.text()}')
+                else:
+                    print('Директория уже существует')
+            except OSError as errorDescription: 
+                print("OS Error" + str(errorDescription))
         if self.checkCopyInDone.isChecked() and os.path.exists(f'{WORK_DIR}/{self.ticketNumber.text()}'):
             if not os.path.exists(WORK_DONE_DIR):
                 os.makedirs(WORK_DONE_DIR)    
             shutil.move(f'{WORK_DIR}/{self.ticketNumber.text()}', WORK_DONE_DIR)
         self.hide()
 
-def comment_hotkey_pressed(window: MainWindow):
-    keyboard.write(f'//++GIV {str(date.today())} ({load_last_num()})\r\n//--GIV {str(date.today())} ({load_last_num()})')
+    def configChanged(self):
+        selected_config = self.listOfConfigs.currentText()
+        adapterModel = DirectoryTreeAdapter(os.path.join('1CMetadata', selected_config))
+        self.configTree.setModel(adapterModel)
 
-def open_notepad():
+    def on_ticket_number_edited(self):
+        new_num = self.ticketNumber.text().strip()
+        if not new_num or new_num == self.current_ticket_number:
+            return
+        self._archive_current_note()
+        self._load_template(new_num)
+        self.current_ticket_number = new_num
+        save_last_num(new_num)
+
+    def _archive_current_note(self):
+        old_num = self.current_ticket_number
+        if not old_num:
+            return
+        os.makedirs(OBSIDIAN_PATH, exist_ok=True)
+        note = self.added_components.toPlainText().strip()
+        header = f'#НомерЗадачи : {old_num}'
+        content = note if header in note else header + '\n\n' + note
+        with open(os.path.join(OBSIDIAN_PATH, f'{old_num}.md'), 'w', encoding='utf-8') as f:
+            f.write(content)
+
+    def _load_template(self, new_num):
+        with open('components.md', encoding='utf-8') as f:
+            template = f.read()
+        self.added_components.setText(template.replace('{ticketNumber}', new_num))
+
+def comment_hotkey_pressed() -> None:
+    keyboard.write(f'//++GIV {str(date.today().strftime("%d%m%Y"))} ({load_last_num()})\r\n//--GIV {str(date.today().strftime("%d%m%Y"))} ({load_last_num()})')
+
+def open_notepad() -> None:
     if os.path.exists("C:/Program Files/Notepad++/notepad++.exe"):
         sErrCode = subprocess.run('C:/Program Files/Notepad++/notepad++.exe')
         if sErrCode.returncode != 0:
             print(sErrCode)
     
-def update_git():
-    """Распаковать ConfigFiles.zip в ConfFiles
-    Перед этим удаляется старый ConfFiles
-    """
-    if os.path.exists(GIT_PATH):
-        if os.path.exists(f'{GIT_PATH} + "/ConfFiles"'):
-            shutil.rmtree(f'{GIT_PATH} + "/ConfFiles"')
-        with zipfile.ZipFile(f'{GIT_PATH} + "/ConfigFiles.zip"', 'r') as zip_ref:
-            zip_ref.extractall(f'{GIT_PATH} + "/ConfFiles/"')
-
-def run_config():
-    #TODO А может и не так, а включать ТЖ И ловить по нему ошибку?
-    if os.path.exists("C:/Program Files/1cv8/common/1cestart.exe"):
-        try:
-            subprocess.Popen(args=['C:/Program Files/1cv8/common/1cestart.exe', 'DESIGNER', '/IBName' 'Библиотека стандартных подсистем (демо)', '/NАдминистратор', 
-                    '/LoadConfigFromFiles' 'C:/Git/ConfigFiles/', '-Extension' 'УниверсальныеИнструменты', 
-                    '-updateConfigDumpInfo', '/Out 1cLog.txt']).communicate(timeout=120)
-        except subprocess.TimeoutExpired:
-            print('Закончилось время')
-        except subprocess.OSError:
-            print('Ошибка ОС при запуске')
-        except subprocess.CalledProcessError:
-            print('Ошибка вызываемой программы')
-        except subprocess.ValueError:
-            print('Ошибка значения аргументов при вызове Popen')
-        # except:
-        #     print('Другая ошибка запуска')
-        #sErrCode = subprocess.Popen('C:/Program Files/1cv8/common/1cestart.exe DESIGNER /IBName \"Библиотека стандартных подсистем (демо)\" /NАдминистратор /LoadConfigFromFiles C:\Git\ConfigFiles\ -Extension \"УниверсальныеИнструменты\" -updateConfigDumpInfo -SessionTerminate force -v2')
+def open_window() -> None:
+    window.tray_icon_clicked(QSystemTrayIcon.ActivationReason.Trigger)
         
-        
+def run_global_hotkeys():
+    bindings = [
+        ["control + alt + k", None, comment_hotkey_pressed, True],
+        ["control + alt + o", None, open_window, True],
+        ["control + alt + t", None, paste_path_to_task, True],
+    ]
+    register_hotkeys(bindings)
+    start_checking_hotkeys()
+    while is_alive:
+        time.sleep(0.1)
 
-def wait_keys(window: MainWindow):
-    keyboard.add_hotkey('ctrl+alt+k', comment_hotkey_pressed,args=(window, ))
-    keyboard.add_hotkey('ctrl+alt+o', open_notepad)
-    keyboard.add_hotkey('ctrl+alt+g', update_git)
-    keyboard.add_hotkey('ctrl+alt+c', run_config)
-    keyboard.wait()
+def stop_global_hotkeys():
+    global is_alive
+    is_alive = False
+    stop_checking_hotkeys()
 
 def load_last_num():
     try:
@@ -172,10 +265,22 @@ def save_last_num(ticketNumber):
         with open(TICKET_NUM_FILE, "w+") as f:
             f.write(ticketNumber + '\r\n')
 
+
+def paste_path_to_task():
+    keyboard.write(f'{WORK_DIR}/{load_last_num()}')
+
+def load_added_components():
+    try:
+        with open(ADDED_COMPONENTS_FILE, "r") as f:
+            return "".join(f.readlines())
+    except OSError:
+        return 'Ошибка чтения файла тикета'
+
+app = QApplication([])
+app.setWindowIcon(QIcon("Bull.png"))
+window = MainWindow()
+
 if __name__ == "__main__":
-    app = QApplication([])
-    app.setWindowIcon(QIcon("Bull.png"))
-    window = MainWindow()
-    threading.Thread(target=wait_keys, args=(window,)).start()
+    threading.Thread(target=run_global_hotkeys, daemon=True).start()
     app.exec()
     
