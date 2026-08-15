@@ -1,7 +1,7 @@
 import keyboard, os, subprocess, shutil, threading, time
 from datetime import date
 from global_hotkeys import *
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import QApplication, QWidget, QMainWindow, QLineEdit, QPushButton, QSystemTrayIcon, QMenu, QCheckBox, QGridLayout, QTextEdit, QComboBox, QTreeView, QTreeWidgetItem, QAbstractItemView
 from PyQt6.QtGui import QIcon, QAction
 from oneCtreeparse import DirectoryTreeAdapter
@@ -71,6 +71,8 @@ class AddedComponents(QTextEdit):
             f.write(self.toPlainText() + '\r\n')
 
 class MainWindow(QMainWindow):
+    show_window_signal = pyqtSignal()
+
     def __init__(self):
         super().__init__()        
         self.setWindowTitle('Номер заявки')
@@ -129,6 +131,7 @@ class MainWindow(QMainWindow):
         tray_menu.addAction(exit_action)
         self.tray_icon.setContextMenu(tray_menu)
         self.tray_icon.activated.connect(self.tray_icon_clicked)
+        self.show_window_signal.connect(self.toggle_window)
         self.tray_icon.show()
         #self.hide() 
         # Не понятное поведение, но если не показывать при старте, то не вызывается хоткеями.
@@ -157,13 +160,17 @@ class MainWindow(QMainWindow):
         stop_global_hotkeys()
         QApplication.quit()
         
+    def toggle_window(self):
+        if self.isHidden() or self.isMinimized():
+            self.show_window()
+        else:
+            self.hide()
+
     def tray_icon_clicked(self, reason):
         """Обработка кликов по иконке в трее"""
-        if reason == QSystemTrayIcon.ActivationReason.Trigger:  # Обычный клик
-            if self.isHidden() or self.isMinimized():
-                self.showNormal()
-            else:
-                self.hide()
+        if reason in (QSystemTrayIcon.ActivationReason.Trigger,
+                      QSystemTrayIcon.ActivationReason.DoubleClick):
+            self.toggle_window()
     
     def closeEvent(self, event):
         """Сохраним номер задачи"""
@@ -236,7 +243,7 @@ def open_notepad() -> None:
             print(sErrCode)
     
 def open_window() -> None:
-    window.tray_icon_clicked(QSystemTrayIcon.ActivationReason.Trigger)
+    window.show_window_signal.emit()
         
 def run_global_hotkeys():
     bindings = [
