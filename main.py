@@ -228,7 +228,26 @@ class MainWindow(QMainWindow):
         with open(os.path.join(OBSIDIAN_PATH, f'{old_num}.md'), 'w', encoding='utf-8') as f:
             f.write(content)
 
+    def _find_existing_note_file(self, new_num):
+        if not os.path.isdir(OBSIDIAN_PATH):
+            return None
+        matches = []
+        for name in os.listdir(OBSIDIAN_PATH):
+            if not name.lower().endswith('.md'):
+                continue
+            base = name[:-3]
+            if base.casefold().startswith(new_num.casefold()):
+                matches.append(name)
+        if not matches:
+            return None
+        return os.path.join(OBSIDIAN_PATH, sorted(matches)[0])
+
     def _load_template(self, new_num):
+        existing = self._find_existing_note_file(new_num)
+        if existing is not None:
+            with open(existing, encoding='utf-8') as f:
+                self.added_components.setText(f.read())
+            return
         with open('components.md', encoding='utf-8') as f:
             template = f.read()
         self.added_components.setText(template.replace('{ticketNumber}', new_num))
